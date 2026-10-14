@@ -1,0 +1,19 @@
+{
+  "name": "Shoe Life",
+  "short_name": "Shoe Life",
+  "description": "On-device reminder to check your shoes. Estimates usage only.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#1a3a2a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
