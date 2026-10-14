@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#1a3a2a">
+  <meta name="description" content="Shoe Life — on-device reminder to check your shoes. Estimates usage only.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>Shoe Life</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <p class="test-banner" role="note">Test version - estimates only, not final</p>
+
+  <header class="app-header">
+    <h1 class="app-title">Shoe Life</h1>
+    <p class="app-tagline">Remember when to check your shoes</p>
+  </header>
+
+  <nav class="tab-bar" role="navigation" aria-label="Main">
+    <button type="button" class="tab active" data-view="home" aria-current="page">
+      <span class="tab-icon" aria-hidden="true">👟</span>
+      <span>Pairs</span>
+    </button>
+    <button type="button" class="tab" data-view="today">
+      <span class="tab-icon" aria-hidden="true">📅</span>
+      <span>Today</span>
+    </button>
+    <button type="button" class="tab" data-view="check">
+      <span class="tab-icon" aria-hidden="true">🔍</span>
+      <span>Check</span>
+    </button>
+    <button type="button" class="tab" data-view="settings">
+      <span class="tab-icon" aria-hidden="true">⚙️</span>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <main id="main" class="main" tabindex="-1">
+    <!-- Home: pair cards -->
+    <section id="view-home" class="view" aria-labelledby="home-heading">
+      <div class="view-header">
+        <h2 id="home-heading">Your pairs</h2>
+        <button type="button" class="btn btn-primary" id="btn-add-pair">+ Add pair</button>
+      </div>
+      <div id="check-banners" class="banners" role="region" aria-label="Check prompts"></div>
+      <div id="pair-list" class="card-list"></div>
+      <p id="home-empty" class="empty-state hidden">No pairs yet. Add your first pair to start logging steps.</p>
+    </section>
+
+    <!-- Today: log steps -->
+    <section id="view-today" class="view hidden" aria-labelledby="today-heading">
+      <h2 id="today-heading">Log steps</h2>
+      <form id="form-log-steps" class="form-card">
+        <label for="log-date">Date</label>
+        <input type="date" id="log-date" required>
+
+        <fieldset>
+          <legend>How are you entering steps?</legend>
+          <label class="radio-row"><input type="radio" name="log-source" value="manual" checked> Manual entry</label>
+          <label class="radio-row"><input type="radio" name="log-source" value="shift"> Shift template</label>
+          <label class="radio-row"><input type="radio" name="log-source" value="csv"> CSV import (stub)</label>
+        </fieldset>
+
+        <div id="manual-fields">
+          <label for="log-steps">Steps today</label>
+          <div class="input-row">
+            <input type="number" id="log-steps" min="0" max="100000" step="1" inputmode="numeric" placeholder="e.g. 8500">
+            <button type="button" class="btn btn-secondary" id="btn-same-usual" title="Use your usual daily steps">Same as usual</button>
+          </div>
+        </div>
+
+        <div id="shift-fields" class="hidden">
+          <label for="shift-template">Shift type</label>
+          <select id="shift-template"></select>
+          <p class="hint" id="shift-hint"></p>
+        </div>
+
+        <div id="csv-fields" class="hidden">
+          <p class="hint">CSV import is a stub in v0.1. Pick a Google Fit / Samsung Health / Apple Health export when you have a fixture. Parsing stays on-device.</p>
+          <label for="csv-file">CSV file</label>
+          <input type="file" id="csv-file" accept=".csv,text/csv">
+          <p id="csv-status" class="hint" role="status"></p>
+        </div>
+
+        <label for="log-standing">Standing hours (optional, estimate)</label>
+        <input type="number" id="log-standing" min="0" max="24" step="0.5" inputmode="decimal" placeholder="e.g. 2">
+        <p class="hint estimate-note">We count standing too; this is a rough guess (placeholder).</p>
+
+        <label for="log-pair">Worn today</label>
+        <select id="log-pair" required></select>
+
+        <button type="submit" class="btn btn-primary btn-block">Save day log</button>
+      </form>
+
+      <h3 class="subhead">Recent logs</h3>
+      <ul id="recent-logs" class="list-plain"></ul>
+    </section>
+
+    <!-- Check wizard -->
+    <section id="view-check" class="view hidden" aria-labelledby="check-heading">
+      <h2 id="check-heading">Check your shoes</h2>
+      <p class="lede">A short look-and-press routine. Record what you see. This app cannot tell you how your shoes or your body are doing.</p>
+
+      <form id="form-check" class="form-card">
+        <label for="check-pair">Pair</label>
+        <select id="check-pair" required></select>
+
+        <fieldset>
+          <legend>1. Look (about 20 seconds)</legend>
+          <ul class="check-list">
+            <li>Creasing in the midsole side walls</li>
+            <li>Outsole worn through to foam</li>
+            <li>Heel counter leaning</li>
+          </ul>
+        </fieldset>
+
+        <fieldset>
+          <legend>2. Press-test the heel</legend>
+          <p class="hint">Press the heel foam with your thumb. Compare with how it felt when new, or with a new pair of the same model.</p>
+        </fieldset>
+
+        <fieldset id="visual-guide">
+          <legend>Visual check guide (optional)</legend>
+          <p class="hint">Three quick checks. Your answers suggest a result in step 4; you can always change it.</p>
+
+          <h3 class="subhead">A. Crease test</h3>
+          <svg class="vc-svg" viewBox="0 0 200 90" role="img" aria-labelledby="svg-crease-t"><title id="svg-crease-t">Side view of a shoe with deep lines in the midsole side wall</title>
+<path d="M15 55 Q20 25 60 25 L110 30 Q150 30 175 45 Q190 52 185 60 L15 60 Z" fill="#e8efe9" stroke="#1a3a2a" stroke-width="3"/>
+<rect x="12" y="60" width="176" height="18" rx="6" fill="#fff" stroke="#1a3a2a" stroke-width="3"/>
+<path d="M70 62 q4 7 0 14 M85 62 q5 7 0 14 M100 62 q4 7 0 14" fill="none" stroke="#a33" stroke-width="3" stroke-linecap="round"/></svg>
+          <p>Look at the side of the foam under the heel and forefoot. Are there deep creases that stay when the shoe is not being worn?</p>
+          <div class="radio-group" role="radiogroup" aria-label="Crease test"><label class="radio-row"><input type="radio" name="vc-crease" value="no"> ✓ No deep creases</label><label class="radio-row"><input type="radio" name="vc-crease" value="some"> 👀 A few light creases</label><label class="radio-row"><input type="radio" name="vc-crease" value="yes"> ⚠️ Deep creases that stay</label><label class="radio-row"><input type="radio" name="vc-crease" value="skip" checked> Skip</label></div>
+
+          <h3 class="subhead">B. Flat-table tilt test</h3>
+          <svg class="vc-svg" viewBox="0 0 200 110" role="img" aria-labelledby="svg-tilt-t"><title id="svg-tilt-t">Back view of a shoe on a flat table, leaning to one side next to a straight dashed line</title>
+<line x1="10" y1="95" x2="190" y2="95" stroke="#1a3a2a" stroke-width="4"/>
+<line x1="100" y1="15" x2="100" y2="95" stroke="#555" stroke-width="2" stroke-dasharray="6 5"/>
+<g transform="rotate(10 100 93)"><path d="M75 92 L75 40 Q75 20 100 20 Q125 20 125 40 L125 92 Z" fill="#e8efe9" stroke="#1a3a2a" stroke-width="3"/>
+<rect x="70" y="78" width="60" height="15" rx="4" fill="#fff" stroke="#1a3a2a" stroke-width="3"/></g></svg>
+          <p>Put the shoe on a flat table and look at it from behind at eye level. Does it lean to one side?</p>
+          <div class="radio-group" role="radiogroup" aria-label="Tilt test"><label class="radio-row"><input type="radio" name="vc-tilt" value="no"> ✓ Sits straight</label><label class="radio-row"><input type="radio" name="vc-tilt" value="some"> 👀 Leans a little</label><label class="radio-row"><input type="radio" name="vc-tilt" value="yes"> ⚠️ Leans clearly</label><label class="radio-row"><input type="radio" name="vc-tilt" value="skip" checked> Skip</label></div>
+
+          <h3 class="subhead">C. Thumb-press rebound</h3>
+          <svg class="vc-svg" viewBox="0 0 200 90" role="img" aria-labelledby="svg-press-t"><title id="svg-press-t">A thumb pressing the heel foam of a shoe</title>
+<path d="M20 50 Q25 25 70 25 L150 30 Q185 35 185 52 L20 55 Z" fill="#e8efe9" stroke="#1a3a2a" stroke-width="3"/>
+<rect x="15" y="55" width="172" height="20" rx="6" fill="#fff" stroke="#1a3a2a" stroke-width="3"/>
+<ellipse cx="35" cy="50" rx="13" ry="18" fill="#f3d9c4" stroke="#1a3a2a" stroke-width="3" transform="rotate(-25 35 50)"/>
+<path d="M30 70 l-8 10 M40 70 l8 10" stroke="#1a3a2a" stroke-width="2"/></svg>
+          <p>Press the heel foam firmly with your thumb, then let go. Compare with a newer pair if you have one. Does it feel flat or slow to spring back?</p>
+          <div class="radio-group" role="radiogroup" aria-label="Thumb-press rebound"><label class="radio-row"><input type="radio" name="vc-press" value="no"> ✓ Springs back like new</label><label class="radio-row"><input type="radio" name="vc-press" value="some"> 👀 A bit softer or slower</label><label class="radio-row"><input type="radio" name="vc-press" value="yes"> ⚠️ Feels flat or stays pressed</label><label class="radio-row"><input type="radio" name="vc-press" value="skip" checked> Skip</label></div>
+          <p id="vc-suggest" class="hint" role="status" aria-live="polite"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>3. Optional gauge or durometer</legend>
+          <label for="check-method">Method</label>
+          <select id="check-method">
+            <option value="visual">Visual only</option>
+            <option value="press-test">Press-test</option>
+            <option value="gauge">Shoe Life gauge (estimate bands)</option>
+            <option value="durometer">Durometer reading</option>
+          </select>
+          <label for="check-reading">Reading (optional)</label>
+          <input type="number" id="check-reading" step="0.1" inputmode="decimal" placeholder="e.g. depth mm or Shore A">
+          <p class="hint estimate-note">Gauge bands are design targets, not validated. See GAUGE.md.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>4. Result</legend>
+          <label class="radio-row"><input type="radio" name="check-result" value="ok" checked> Looks fine for now</label>
+          <label class="radio-row"><input type="radio" name="check-result" value="watch"> Worth a closer look</label>
+          <label class="radio-row"><input type="radio" name="check-result" value="replace"> Consider replacing soon</label>
+        </fieldset>
+
+        <label for="check-note">Note (optional)</label>
+        <textarea id="check-note" rows="2" maxlength="500"></textarea>
+
+        <label class="check-row">
+          <input type="checkbox" id="check-retire">
+          Retire this pair after saving
+        </label>
+
+        <button type="submit" class="btn btn-primary btn-block">Save check</button>
+      </form>
+    </section>
+
+    <!-- Settings -->
+    <section id="view-settings" class="view hidden" aria-labelledby="settings-heading">
+      <h2 id="settings-heading">Settings</h2>
+
+      <form id="form-settings" class="form-card">
+        <label for="weight-band">Body weight band (optional, estimate factor)</label>
+        <select id="weight-band">
+          <option value="">Not set</option>
+          <option value="lt60">&lt; 60 kg (factor 0.9 — estimate)</option>
+          <option value="60-80">60–80 kg (factor 1.0 — estimate)</option>
+          <option value="80-100">80–100 kg (factor 1.1 — estimate)</option>
+          <option value="gt100">&gt; 100 kg (factor 1.2 — estimate)</option>
+        </select>
+        <p class="hint estimate-note">Weight factors are placeholders. No published coefficient exists yet.</p>
+
+        <label for="usual-steps">Usual daily steps</label>
+        <input type="number" id="usual-steps" min="0" max="100000" step="1" inputmode="numeric" value="8000">
+
+        <label for="default-threshold">Default check threshold (effective steps, estimate)</label>
+        <input type="number" id="default-threshold" min="100000" max="2000000" step="10000" inputmode="numeric" value="750000">
+        <p class="hint estimate-note">Default ~750,000 is a heuristic, not validated science. You can override per pair.</p>
+
+        <h3 class="subhead">Shift templates</h3>
+        <div id="shift-list"></div>
+        <button type="button" class="btn btn-secondary" id="btn-add-shift">+ Add shift template</button>
+
+        <button type="submit" class="btn btn-primary btn-block">Save settings</button>
+      </form>
+
+      <div class="form-card">
+        <h3 class="subhead">Data</h3>
+        <button type="button" class="btn btn-secondary btn-block" id="btn-export">Export JSON</button>
+        <label class="btn btn-secondary btn-block file-label">
+          Import JSON
+          <input type="file" id="btn-import" accept="application/json,.json" hidden>
+        </label>
+        <button type="button" class="btn btn-danger btn-block" id="btn-wipe">Wipe all data</button>
+        <p class="hint">Everything stays on this device. Export/import is a local file only.</p>
+      </div>
+
+      <p><a href="privacy.html">Privacy statement</a></p>
+    </section>
+
+    <!-- Add / edit pair dialog (inline panel) -->
+    <section id="view-pair-form" class="view hidden" aria-labelledby="pair-form-heading">
+      <h2 id="pair-form-heading">Add pair</h2>
+      <form id="form-pair" class="form-card">
+        <input type="hidden" id="pair-id">
+        <label for="pair-nickname">Nickname</label>
+        <input type="text" id="pair-nickname" required maxlength="60" placeholder="e.g. Work clogs">
+
+        <label for="pair-type">Type</label>
+        <select id="pair-type" required>
+          <option value="running">Running / max-cushion (typeFactor 1.0 — estimate)</option>
+          <option value="walking">Walking / court (typeFactor 0.9 — estimate)</option>
+          <option value="work">Work / nursing clog (typeFactor 0.8 — estimate)</option>
+          <option value="casual">Casual / fashion (typeFactor 1.0 — estimate)</option>
+        </select>
+        <p class="hint estimate-note">Type factors are initial guesses. No published data supports these numbers yet.</p>
+
+        <label for="pair-purchase">Purchase / start date</label>
+        <input type="date" id="pair-purchase" required>
+
+        <label for="pair-first-worn">Date first worn</label>
+        <input type="date" id="pair-first-worn">
+        <p class="hint estimate-note">After about 12 months we start lowering the estimate a little at a time, even with few steps (full effect by about 18–24 months). This is an estimate.</p>
+
+        <label for="pair-foam">Foam type</label>
+        <select id="pair-foam">
+          <option value="standard">Standard foam — EVA (factor 1.0 — estimate)</option>
+          <option value="super">Racing / super foam — PEBA, ETPU, e.g. ZoomX, Boost (factor 0.7 — estimate)</option>
+          <option value="firm">Firm / PU / work shoe (factor 1.1 — estimate)</option>
+          <option value="unsure">Unsure (factor 1.0 — estimate)</option>
+        </select>
+        <p class="hint estimate-note">Foam factors are placeholders, not validated. A lower factor means a check sooner.</p>
+
+        <label for="pair-brand">Brand and model (optional, used only for the shop search)</label>
+        <input type="text" id="pair-brand" maxlength="80" placeholder="e.g. Brand Model 3">
+
+        <label for="pair-start-steps">Starting effective steps (usually 0)</label>
+        <input type="number" id="pair-start-steps" min="0" value="0" step="1" inputmode="numeric">
+
+        <label for="pair-threshold">Check threshold override (optional)</label>
+        <input type="number" id="pair-threshold" min="100000" max="2000000" step="10000" inputmode="numeric" placeholder="Use default">
+
+        <label for="pair-baseline">Baseline gauge reading (optional)</label>
+        <input type="number" id="pair-baseline" step="0.1" inputmode="decimal" placeholder="When new">
+
+        <label for="pair-photo">Photo (optional, stays on device)</label>
+        <input type="file" id="pair-photo" accept="image/*">
+
+        <div class="btn-row">
+          <button type="button" class="btn btn-secondary" id="btn-pair-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save pair</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Pair detail -->
+    <section id="view-pair-detail" class="view hidden" aria-labelledby="pair-detail-heading">
+      <button type="button" class="btn btn-link" id="btn-detail-back">← Back to pairs</button>
+      <h2 id="pair-detail-heading">Pair</h2>
+      <div id="pair-detail-body"></div>
+    </section>
+  </main>
+
+  <footer class="app-footer" role="contentinfo">
+    <p>Shoe Life estimates usage only. It can't tell you how your shoes or your body are doing.</p>
+  </footer>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

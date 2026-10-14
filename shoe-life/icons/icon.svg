@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Shoe Life">
+  <rect width="128" height="128" rx="24" fill="#1a3a2a"/>
+  <path d="M20 78c18-6 36-18 52-22 10-2 18 2 28 8 8 5 16 10 22 10v12c-12 2-24-2-36-8-10-5-20-8-30-6-12 2-24 10-36 12z" fill="#f4f1ea"/>
+  <path d="M28 70c8-4 16-8 24-10" fill="none" stroke="#c45c26" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="96" cy="40" r="14" fill="#c45c26"/>
+  <path d="M96 33v14M89 40h14" stroke="#f4f1ea" stroke-width="3" stroke-linecap="round"/>
+</svg>
