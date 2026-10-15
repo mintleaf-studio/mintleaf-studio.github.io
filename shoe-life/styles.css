@@ -1,4 +1,4 @@
-/* Shoe Life PWA v0.1 — WCAG-minded, large text, big tap targets */
+/* Shoe Life PWA v0.3 (base v0.1) — WCAG-minded, large text, big tap targets */
 
 :root {
   --bg: #f4f1ea;
@@ -422,3 +422,123 @@ button:focus-visible {
 .banner.tip { border-left-style: dashed; }
 .shop-link { display:inline-flex; align-items:center; gap:0.4rem; min-height:48px; text-decoration:none; margin:0.25rem 0 0.75rem; }
 .radio-group { margin-bottom: 0.5rem; }
+
+/* v0.3: Shoe Closet grid */
+.closet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+.closet-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.closet-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+.closet-card.retired { opacity: 0.75; }
+.closet-select {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  flex: 1;
+}
+.closet-select:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.closet-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #e8efe9;
+}
+.photo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+}
+.closet-body { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.7rem 0.75rem 0.8rem; }
+.closet-body .pair-name { display: block; font-size: 1.1rem; }
+.closet-body .pair-meta { display: block; margin: 0; font-size: 0.9rem; }
+.pair-miles { display: block; font-size: 1rem; }
+.pair-miles strong { font-size: 1.2rem; }
+.closet-body .usage-bar-wrap { display: block; margin-top: 0.2rem; }
+.closet-body .usage-label { display: block; font-size: 0.88rem; font-weight: 600; }
+.closet-body .usage-track { display: block; }
+.closet-body .usage-fill { display: block; }
+.selected-pill {
+  align-self: flex-start;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+.closet-details { margin: 0 0.75rem 0.75rem; }
+.closet-add {
+  min-height: 10rem;
+  border: 2px dashed var(--brand);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  cursor: pointer;
+}
+.closet-add-plus { font-size: 2.2rem; line-height: 1; }
+.closet-add:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.wear-today .subhead { margin-top: 0; }
+.wear-selected { font-weight: 700; font-size: 1.1rem; margin: 0.25rem 0; }
+#btn-wear-today { font-size: 1.15rem; min-height: 56px; }
+#btn-wear-today:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* v0.3: check-point alert card — visually distinct, friendly */
+.checkpoint-alert {
+  background: #fff6e0;
+  border: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.85rem;
+  box-shadow: 0 3px 0 rgba(196, 92, 38, 0.25);
+}
+.ca-head { display: flex; align-items: center; gap: 0.6rem; }
+.ca-icon { font-size: 2rem; line-height: 1; }
+.checkpoint-alert h3 { margin: 0; font-size: 1.35rem; color: var(--brand); }
+.checkpoint-alert p { margin: 0.6rem 0; }
+.ca-actions { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.75rem; }
+.ca-actions .btn, .ca-actions .shop-link { width: 100%; margin: 0; min-height: var(--tap); }
+.affiliate-disclosure { font-size: 0.85rem; }
+
+.pair-photo-large {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  margin: 0.5rem 0;
+}
+.photo-field .btn-row { margin-top: 0.5rem; }
+.closet-body .status-pill { align-self: flex-start; }
+.privacy-main { padding-top: 1.5rem; }

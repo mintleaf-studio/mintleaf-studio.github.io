@@ -25,7 +25,7 @@
   <nav class="tab-bar" role="navigation" aria-label="Main">
     <button type="button" class="tab active" data-view="home" aria-current="page">
       <span class="tab-icon" aria-hidden="true">👟</span>
-      <span>Pairs</span>
+      <span>Closet</span>
     </button>
     <button type="button" class="tab" data-view="today">
       <span class="tab-icon" aria-hidden="true">📅</span>
@@ -42,20 +42,31 @@
   </nav>
 
   <main id="main" class="main" tabindex="-1">
-    <!-- Home: pair cards -->
+    <!-- Home: Shoe Closet grid -->
     <section id="view-home" class="view" aria-labelledby="home-heading">
       <div class="view-header">
-        <h2 id="home-heading">Your pairs</h2>
+        <h2 id="home-heading">Shoe Closet</h2>
         <button type="button" class="btn btn-primary" id="btn-add-pair">+ Add pair</button>
       </div>
       <div id="check-banners" class="banners" role="region" aria-label="Check prompts"></div>
-      <div id="pair-list" class="card-list"></div>
       <p id="home-empty" class="empty-state hidden">No pairs yet. Add your first pair to start logging steps.</p>
+      <div id="pair-list" class="closet-grid" aria-label="Your pairs"></div>
+
+      <div id="wear-today" class="form-card wear-today hidden" role="region" aria-labelledby="wear-today-heading">
+        <h3 id="wear-today-heading" class="subhead">Today</h3>
+        <p id="wear-selected" class="wear-selected"></p>
+        <label for="wear-steps">Steps today (manual entry)</label>
+        <input type="number" id="wear-steps" min="0" max="100000" step="1" inputmode="numeric" placeholder="e.g. 8500">
+        <button type="button" class="btn btn-primary btn-block" id="btn-wear-today">👟 Wearing These Today</button>
+        <p id="wear-status" class="hint" role="status" aria-live="polite"></p>
+        <p class="hint">All of today's steps go to the selected pair. Miles = steps ÷ 2,000 (display only). Automatic step syncing will come in the Android version.</p>
+      </div>
     </section>
 
     <!-- Today: log steps -->
     <section id="view-today" class="view hidden" aria-labelledby="today-heading">
       <h2 id="today-heading">Log steps</h2>
+      <p class="hint">Enter steps by hand for now. Automatic step syncing will come in the Android version.</p>
       <form id="form-log-steps" class="form-card">
         <label for="log-date">Date</label>
         <input type="date" id="log-date" required>
@@ -209,8 +220,8 @@
         <input type="number" id="usual-steps" min="0" max="100000" step="1" inputmode="numeric" value="8000">
 
         <label for="default-threshold">Default check threshold (effective steps, estimate)</label>
-        <input type="number" id="default-threshold" min="100000" max="2000000" step="10000" inputmode="numeric" value="750000">
-        <p class="hint estimate-note">Default ~750,000 is a heuristic, not validated science. You can override per pair.</p>
+        <input type="number" id="default-threshold" min="100000" max="2000000" step="10000" inputmode="numeric" value="700000">
+        <p class="hint estimate-note">Default 700,000 steps (about 350 mi at 2,000 steps per mile) is a heuristic, not validated science. Foam type, age and weight band still adjust it. You can override per pair.</p>
 
         <h3 class="subhead">Shift templates</h3>
         <div id="shift-list"></div>
@@ -230,7 +241,7 @@
         <p class="hint">Everything stays on this device. Export/import is a local file only.</p>
       </div>
 
-      <p><a href="privacy.html">Privacy statement</a></p>
+      <p><a href="privacy.html">Privacy &amp; about (includes link disclosure)</a></p>
     </section>
 
     <!-- Add / edit pair dialog (inline panel) -->
@@ -239,7 +250,22 @@
       <form id="form-pair" class="form-card">
         <input type="hidden" id="pair-id">
         <label for="pair-nickname">Nickname</label>
-        <input type="text" id="pair-nickname" required maxlength="60" placeholder="e.g. Work clogs">
+        <input type="text" id="pair-nickname" required maxlength="60" placeholder="e.g. Daily Walkers">
+
+        <fieldset class="photo-field">
+          <legend>Photo (optional, stays on this device)</legend>
+          <img id="pair-photo-preview" class="pair-photo-large hidden" alt="Photo preview">
+          <div class="btn-row">
+            <label class="btn btn-secondary file-label">📷 Take photo
+              <input type="file" id="pair-photo-camera" accept="image/*" capture="environment" hidden>
+            </label>
+            <label class="btn btn-secondary file-label">🖼️ Choose file
+              <input type="file" id="pair-photo" accept="image/*" hidden>
+            </label>
+          </div>
+          <button type="button" class="btn btn-link hidden" id="btn-photo-remove">Remove photo</button>
+          <p class="hint">Shrunk to about 512 px on this device and saved only here. Never uploaded.</p>
+        </fieldset>
 
         <label for="pair-type">Type</label>
         <select id="pair-type" required>
@@ -266,7 +292,7 @@
         </select>
         <p class="hint estimate-note">Foam factors are placeholders, not validated. A lower factor means a check sooner.</p>
 
-        <label for="pair-brand">Brand and model (optional, used only for the shop search)</label>
+        <label for="pair-brand">Brand and model (optional, used only for the insole and shop searches)</label>
         <input type="text" id="pair-brand" maxlength="80" placeholder="e.g. Brand Model 3">
 
         <label for="pair-start-steps">Starting effective steps (usually 0)</label>
@@ -277,9 +303,6 @@
 
         <label for="pair-baseline">Baseline gauge reading (optional)</label>
         <input type="number" id="pair-baseline" step="0.1" inputmode="decimal" placeholder="When new">
-
-        <label for="pair-photo">Photo (optional, stays on device)</label>
-        <input type="file" id="pair-photo" accept="image/*">
 
         <div class="btn-row">
           <button type="button" class="btn btn-secondary" id="btn-pair-cancel">Cancel</button>

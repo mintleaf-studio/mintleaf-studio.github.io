@@ -5,26 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; font-src 'self'; object-src 'none'">
-  <title>Privacy — Shoe Life</title>
+  <title>Privacy &amp; about — Shoe Life</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="app-header">
-    <h1 class="app-title">Privacy statement</h1>
+    <h1 class="app-title">Privacy &amp; about</h1>
     <p class="app-tagline">Shoe Life</p>
   </header>
-  <main class="main" style="padding-top: 1.5rem;">
+  <main class="main privacy-main">
     <p><a href="index.html">← Back to app</a></p>
     <h2>What we collect</h2>
-    <p><strong>Nothing leaves your device.</strong> Shoe Life is an on-device app. Pair names, step logs, check notes, optional weight band, optional photos, and settings are stored in your browser’s IndexedDB on this device only.</p>
+    <p><strong>Nothing leaves your device.</strong> Shoe Life is an on-device app. Pair names, step logs, check notes, optional weight band, optional pair photos, and settings are stored in your browser’s IndexedDB on this device only.</p>
     <h2>What we don’t do</h2>
     <ul>
       <li>No accounts or sign-in</li>
       <li>No analytics SDKs</li>
       <li>No third-party tracking or advertising</li>
       <li>No server uploads</li>
-      <li>No network calls after install (except optional same-origin asset updates when you host the files yourself)</li>
+      <li>No network calls after install (except optional same-origin asset updates when you host the files yourself, and links you choose to tap)</li>
     </ul>
+    <h2>Pair photos</h2>
+    <p>If you add a photo of a pair (camera or a file you pick), it is shrunk to about 512 pixels on your device and saved in IndexedDB on this device only. Photos are never uploaded. They are included in a JSON export you make yourself, and removed when you wipe data.</p>
+    <h2>Links you tap</h2>
+    <p>When a pair reaches its estimated check point, the app can show “Replace the cushioning” and “Shop new shoes” buttons. They open a web search (DuckDuckGo) in a new tab only when you tap them. Nothing about your pairs or steps is sent except the search words in that link (for example “replacement insoles” plus the brand and model you typed). No tracking parameters are added.</p>
+    <h2 id="affiliate-disclosure">Affiliate disclosure</h2>
+    <p>Right now Shoe Life uses no affiliate links. In a future version, some of these links may be affiliate links; we may earn a commission if you buy through them. When that happens, a short note will appear next to those links in the app, and this section will be updated.</p>
     <h2>Export and wipe</h2>
     <p>You can export your data as a local JSON file, import a JSON file you choose, or wipe all data from Settings. Wipe deletes the IndexedDB database and clears this app’s caches on the device.</p>
     <h2>Optional notifications</h2>
@@ -33,7 +39,7 @@
     <p>Shoe Life estimates usage only. It can’t tell you how your shoes or your body are doing. It does not diagnose, treat, or prevent any condition.</p>
     <h2>Contact</h2>
     <p>Questions about this app: <a href="mailto:mintleafstudio.shop@gmail.com">mintleafstudio.shop@gmail.com</a></p>
-    <p><small>Last updated: 2026-10-12</small></p>
+    <p><small>Last updated: 2026-10-14 (v0.3)</small></p>
   </main>
   <footer class="app-footer" role="contentinfo">
     <p>Shoe Life estimates usage only. It can't tell you how your shoes or your body are doing.</p>

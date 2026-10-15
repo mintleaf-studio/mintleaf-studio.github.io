@@ -1,5 +1,5 @@
 /**
- * Shoe Life PWA v0.2 — on-device only.
+ * Shoe Life PWA v0.3 — on-device only.
  * Estimates usage. Does not diagnose or make health claims.
  * Factors (typeFactor, weightFactor, standingStepEquivalent) are PLACEHOLDERS.
  */
@@ -32,7 +32,15 @@
   };
   /** Pure assumption — flagged in UI */
   const STANDING_STEP_EQUIVALENT = 500;
-  const DEFAULT_THRESHOLD = 750000;
+  /** v0.3: default base check point 700,000 steps (= 350 mi at 2,000 steps/mi). Heuristic, not validated. */
+  const DEFAULT_THRESHOLD = 700000;
+  /** v0.1/v0.2 default; untouched profiles move to the new default during migration. */
+  const LEGACY_DEFAULT_THRESHOLD = 750000;
+  /** Display only: miles = steps / 2000. The wear model still works in (effective) steps. */
+  const STEPS_PER_MILE = 2000;
+  /** Pair photos: downscaled on-device to fit this box, stored as JPEG data URL in IndexedDB. Never uploaded. */
+  const PHOTO_MAX_PX = 512;
+  const PHOTO_JPEG_QUALITY = 0.8;
 
   /**
    * v0.2 foam life multipliers — PLACEHOLDER estimates, not validated.
@@ -55,10 +63,20 @@
   const AGE_DECAY_FULL_MONTHS = 24;
   const AGE_DECAY_MIN_MULT = 0.6;
   const ROTATION_MIN_PAIRS = 2;
-  // TODO(affiliate): before adding any affiliate/referral parameter, add a clear
-  // affiliate disclosure next to the shop button and in privacy.html. None used now.
   const SHOP_SEARCH_BASE = 'https://duckduckgo.com/?q=';
-  const STATE_VERSION = 2;
+  /**
+   * v0.3 check-point card links. All affiliate URLs are null on purpose: the buttons open a plain
+   * DuckDuckGo search (no tracking parameters).
+   * TODO(affiliate): set affiliateUrl only after Rene approves a program and the claims review.
+   * When any affiliateUrl is non-null the card shows AFFILIATE_DISCLOSURE automatically and the links
+   * get rel="sponsored". privacy.html already carries a standing disclosure entry. Never add tracking params.
+   */
+  const AFFILIATE_LINKS = {
+    insoles: { affiliateUrl: null, searchTerms: 'replacement insoles' },
+    shoes: { affiliateUrl: null },
+  };
+  const AFFILIATE_DISCLOSURE = 'Some links may be affiliate links; we may earn a commission.';
+  const STATE_VERSION = 3;
   const TIME_CHECK_MONTHS = 6;
   const PROMPT_PCT = [0.5, 0.8, 1.0];
 
@@ -104,10 +122,13 @@
   }
 
   /**
-   * Migrate v0.1 (or imported) data to v0.2 without dropping anything.
-   * Existing pairs get foam = standard and firstWorn = their start/created date.
+   * Migrate v0.1 / v0.2 (or imported) data to v0.3 without dropping anything.
+   * v0.2: existing pairs get foam = standard and firstWorn = their start/created date.
+   * v0.3: photo is optional (null when missing or not an image data URL); an untouched legacy
+   * default threshold (750,000) moves to the new 700,000 default; custom values are kept.
    */
   function migrateState(raw) {
+    const fromVersion = Number(raw && raw.version) || 1;
     const base = defaultState();
     const s = Object.assign(base, raw || {});
     s.profile = Object.assign(defaultState().profile, (raw && raw.profile) || {});
@@ -119,7 +140,11 @@
       if (!p.createdAt) p.createdAt = p.purchaseDate || todayISO();
       if (!p.firstWorn) p.firstWorn = p.purchaseDate || p.createdAt;
       if (p.brandModel == null) p.brandModel = '';
+      if (typeof p.photoDataUrl !== 'string' || p.photoDataUrl.indexOf('data:image/') !== 0) p.photoDataUrl = null;
     });
+    if (fromVersion < 3 && Number(s.profile.defaultThreshold) === LEGACY_DEFAULT_THRESHOLD) {
+      s.profile.defaultThreshold = DEFAULT_THRESHOLD;
+    }
     s.version = STATE_VERSION;
     return s;
   }
@@ -264,6 +289,41 @@
     return 'Last worn: ' + d + ' days ago';
   }
 
+  /** Display only. */
+  function stepsToMiles(steps) {
+    return (Number(steps) || 0) / STEPS_PER_MILE;
+  }
+
+  function formatMiles(steps) {
+    const m = stepsToMiles(steps);
+    return (m < 100 ? m.toFixed(1) : Math.round(m).toLocaleString()) + ' mi';
+  }
+
+  /** Logged (raw) steps worn in a pair: starting steps + allocated day logs. Used for the miles display. */
+  function pairStepsWorn(pair) {
+    let total = Number(pair.startSteps) || 0;
+    state.allocations.forEach(function (a) {
+      if (a.pairId !== pair.id) return;
+      const log = state.dayLogs.find(function (l) { return l.date === a.date; });
+      if (log) total += (Number(log.totalSteps) || 0) * (a.fraction || 1);
+    });
+    return Math.round(total);
+  }
+
+  function insolesUrl(pair) {
+    if (AFFILIATE_LINKS.insoles.affiliateUrl) return AFFILIATE_LINKS.insoles.affiliateUrl;
+    const bm = (pair.brandModel || '').trim();
+    return SHOP_SEARCH_BASE + encodeURIComponent(AFFILIATE_LINKS.insoles.searchTerms + (bm ? ' ' + bm : ''));
+  }
+
+  function shoesUrl(pair) {
+    return AFFILIATE_LINKS.shoes.affiliateUrl || shopUrl(pair);
+  }
+
+  function affiliateActive() {
+    return Object.keys(AFFILIATE_LINKS).some(function (k) { return !!AFFILIATE_LINKS[k].affiliateUrl; });
+  }
+
   function shopUrl(pair) {
     const q = ((pair.brandModel || '').trim() || (pair.nickname || '').trim() || 'shoes') + ' shoes';
     // Plain search link. No affiliate tag, no tracking parameters.
@@ -356,6 +416,42 @@
   }
 
   // --- render ---
+  /** Pair chosen on the dashboard for 'Wearing These Today' (defaults to today's / most recent pair). */
+  let selectedPairId = null;
+  /** Photo picked in the pair form: undefined = unchanged, '' = removed, string = new downscaled JPEG. */
+  let pendingPhoto;
+
+  function todayLog() {
+    const t = todayISO();
+    return state.dayLogs.find(function (l) { return l.date === t; }) || null;
+  }
+
+  function todayPairId() {
+    const t = todayISO();
+    const a = state.allocations.find(function (x) { return x.date === t; });
+    return a ? a.pairId : null;
+  }
+
+  function defaultSelectedPair() {
+    const actives = state.pairs.filter(function (p) { return p.status === 'active'; });
+    if (selectedPairId && actives.some(function (p) { return p.id === selectedPairId; })) return selectedPairId;
+    const tp = todayPairId();
+    if (tp && actives.some(function (p) { return p.id === tp; })) return tp;
+    let best = null, bestDate = '';
+    actives.forEach(function (p) {
+      const d = lastWornDate(p) || '';
+      if (!best || d > bestDate) { best = p; bestDate = d; }
+    });
+    return best ? best.id : null;
+  }
+
+  function photoHtml(pair, cls) {
+    if (pair.photoDataUrl) {
+      return '<img class="' + cls + '" src="' + escapeAttr(pair.photoDataUrl) + '" alt="Photo of ' + escapeAttr(pair.nickname) + '">';
+    }
+    return '<span class="' + cls + ' photo-placeholder" aria-hidden="true">👟</span>';
+  }
+
   function renderHome() {
     const list = $('pair-list');
     const empty = $('home-empty');
@@ -365,6 +461,7 @@
 
     const active = state.pairs.filter(function (p) { return p.status === 'active'; });
     const retired = state.pairs.filter(function (p) { return p.status === 'retired'; });
+    selectedPairId = defaultSelectedPair();
 
     if (state.pairs.length === 0) {
       empty.classList.remove('hidden');
@@ -373,15 +470,18 @@
     }
 
     active.forEach(function (pair) {
+      if (usagePct(pair) >= 1) {
+        banners.appendChild(checkpointAlert(pair));
+        return;
+      }
       const level = promptLevel(pair);
       if (level) {
         const eff = pairEffectiveSteps(pair);
         const ban = document.createElement('div');
-        ban.className = 'banner' + (level.pct >= 100 || level.kind === 'time' && monthsSince(pair.purchaseDate) >= TIME_CHECK_MONTHS && usagePct(pair) >= 0.8 ? ' urgent' : '');
-        if (level.pct >= 100) ban.classList.add('urgent');
+        ban.className = 'banner';
         const msg = level.kind === 'time'
           ? (pair.nickname + ': about ' + TIME_CHECK_MONTHS + ' months since start. Time to check your shoes.')
-          : (pair.nickname + ': about ' + formatSteps(eff) + ' estimated steps. Time to check your shoes.');
+          : (pair.nickname + ': about ' + formatSteps(eff) + ' estimated steps (' + formatMiles(eff) + '). Time to check your shoes.');
         ban.innerHTML =
           '<span class="banner-icon" aria-hidden="true">' + usageIcon(usagePct(pair)) + '</span>' +
           '<div><strong>' + escapeHtml(pair.nickname) + '</strong><p>' + escapeHtml(msg) + '</p>' +
@@ -416,53 +516,150 @@
 
     function card(pair) {
       const pct = usagePct(pair);
-      const showPct = Math.min(100, Math.round(pct * 100));
-      const thr = pairThreshold(pair);
-      const eff = pairEffectiveSteps(pair);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'pair-card';
-      btn.setAttribute('data-id', pair.id);
-      btn.innerHTML =
-        '<div class="pair-card-top">' +
-          '<p class="pair-name">' + escapeHtml(pair.nickname) + '</p>' +
-          '<span class="status-pill ' + pair.status + '">' + (pair.status === 'active' ? 'Active' : 'Retired') + '</span>' +
-        '</div>' +
-        '<p class="pair-meta">' + escapeHtml(TYPE_LABEL[pair.type] || pair.type) +
-          ' · typeFactor ' + typeFactor(pair.type) + ' (estimate)</p>' +
-        '<p class="pair-meta">' + escapeHtml(FOAM_LABEL[pair.foam] || FOAM_LABEL.standard) + ' · ' + escapeHtml(lastWornText(pair)) + '</p>' +
-        '<div class="usage-bar-wrap">' +
-          '<div class="usage-label">' +
-            '<span aria-hidden="true">' + usageIcon(pct) + '</span>' +
-            '<span>About ' + showPct + '% of your check point</span>' +
-          '</div>' +
-          '<div class="usage-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + showPct + '" aria-label="Usage toward check point">' +
-            '<div class="usage-fill ' + usageFillClass(pct) + '" style="width:' + showPct + '%"></div>' +
-          '</div>' +
-          '<p class="hint">' + formatSteps(eff) + ' / ' + formatSteps(thr) + ' estimated effective steps</p>' +
-        '</div>';
-      btn.addEventListener('click', function () { openPairDetail(pair.id); });
-      list.appendChild(btn);
-      if (pct >= 1) {
-        const shop = shopLink(pair);
-        shop.classList.add('shop-under-card');
-        list.appendChild(shop);
+      const left = Math.max(0, 100 - Math.round(pct * 100));
+      const worn = pairStepsWorn(pair);
+      const isActive = pair.status === 'active';
+      const selected = isActive && pair.id === selectedPairId;
+      const wrap = document.createElement('div');
+      wrap.className = 'closet-card' + (selected ? ' selected' : '') + (isActive ? '' : ' retired');
+      wrap.setAttribute('data-id', pair.id);
+      const main = document.createElement('button');
+      main.type = 'button';
+      main.className = 'closet-select pair-card';
+      main.setAttribute('data-id', pair.id);
+      if (isActive) main.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      main.innerHTML =
+        photoHtml(pair, 'closet-photo') +
+        '<span class="closet-body">' +
+          '<span class="pair-name">' + escapeHtml(pair.nickname) + '</span>' +
+          (selected ? '<span class="selected-pill">✓ Selected</span>' : '') +
+          (isActive ? '' : '<span class="status-pill retired">Retired</span>') +
+          '<span class="pair-meta">' + escapeHtml(FOAM_LABEL[pair.foam] || FOAM_LABEL.standard) + '</span>' +
+          '<span class="pair-miles"><strong>' + formatMiles(worn) + '</strong> worn · ' + formatSteps(worn) + ' steps</span>' +
+          '<span class="usage-bar-wrap">' +
+            '<span class="usage-label">' + (pct >= 1 ? 'Check point reached (estimate)' : 'About ' + left + '% of check point left (estimate)') + '</span>' +
+            '<span class="usage-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + left + '" aria-label="Estimated check point remaining">' +
+              '<span class="usage-fill ' + usageFillClass(pct) + '"></span>' +
+            '</span>' +
+          '</span>' +
+        '</span>';
+      // Width via CSSOM: inline style attributes are blocked by the CSP (style-src 'self').
+      main.querySelector('.usage-fill').style.width = left + '%';
+      main.addEventListener('click', function () {
+        if (!isActive) { openPairDetail(pair.id); return; }
+        selectedPairId = pair.id;
+        renderHome();
+        const b = $('btn-wear-today');
+        if (b) b.focus();
+      });
+      wrap.appendChild(main);
+      if (isActive) {
+        const det = document.createElement('button');
+        det.type = 'button';
+        det.className = 'btn btn-secondary closet-details';
+        det.innerHTML = 'Details<span class="visually-hidden"> for ' + escapeHtml(pair.nickname) + '</span>';
+        det.addEventListener('click', function () { openPairDetail(pair.id); });
+        wrap.appendChild(det);
       }
+      list.appendChild(wrap);
     }
 
     active.forEach(card);
     retired.forEach(card);
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'closet-add';
+    add.id = 'btn-add-pair-tile';
+    add.innerHTML = '<span class="closet-add-plus" aria-hidden="true">＋</span><span>Add pair</span>';
+    add.addEventListener('click', function () { openPairForm(null); });
+    list.appendChild(add);
+
+    renderWearToday();
   }
 
-  function shopLink(pair) {
+  function renderWearToday() {
+    const panel = $('wear-today');
+    if (!panel) return;
+    const actives = state.pairs.filter(function (p) { return p.status === 'active'; });
+    panel.classList.toggle('hidden', actives.length === 0);
+    const pair = state.pairs.find(function (p) { return p.id === selectedPairId; });
+    const log = todayLog();
+    const tp = todayPairId();
+    const tpPair = tp ? state.pairs.find(function (p) { return p.id === tp; }) : null;
+    $('wear-selected').textContent = pair
+      ? 'Selected: ' + pair.nickname
+      : 'Tap a pair above, then tap the button.';
+    $('wear-status').textContent = log
+      ? 'Today so far: ' + formatSteps(log.totalSteps) + ' steps (' + formatMiles(log.totalSteps) + ')' +
+        (tpPair ? ' logged to ' + tpPair.nickname + '.' : '.')
+      : 'Nothing logged for today yet.';
+    if (document.activeElement !== $('wear-steps')) {
+      $('wear-steps').value = log ? String(log.totalSteps) : '';
+    }
+    $('btn-wear-today').disabled = !pair;
+  }
+
+  /** Visually distinct, neutral card shown when an active pair crosses its estimated check point. */
+  function checkpointAlert(pair) {
+    const eff = pairEffectiveSteps(pair);
+    const worn = pairStepsWorn(pair);
+    const card = document.createElement('section');
+    card.className = 'checkpoint-alert';
+    card.setAttribute('data-pair', pair.id);
+    const hid = 'ca-' + pair.id;
+    card.setAttribute('aria-labelledby', hid);
+    card.innerHTML =
+      '<div class="ca-head"><span class="ca-icon" aria-hidden="true">👟</span>' +
+      '<h3 id="' + escapeAttr(hid) + '">Time to check your shoes</h3></div>' +
+      '<p><strong>' + escapeHtml(pair.nickname) + '</strong> has reached its estimated check point of about ' +
+      formatSteps(pairThreshold(pair)) + ' effective steps (' + formatMiles(pairThreshold(pair)) + '). ' +
+      'Estimated so far: ' + formatSteps(eff) + ' effective steps; ' + formatMiles(worn) + ' logged. ' +
+      'This is a reminder based on your step count, not a verdict on the shoes. ' +
+      'A quick look-and-press check can help you decide what to do next.</p>' +
+      '<div class="ca-actions"></div>';
+    const actions = card.querySelector('.ca-actions');
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'btn btn-primary banner-go';
+    go.setAttribute('data-pair', pair.id);
+    go.textContent = 'Start check';
+    actions.appendChild(go);
+    appendCheckpointLinks(actions, pair);
+    card.appendChild(linkNote());
+    return card;
+  }
+
+  function linkNote() {
+    const p = document.createElement('p');
+    if (affiliateActive()) {
+      p.className = 'hint affiliate-disclosure';
+      p.textContent = AFFILIATE_DISCLOSURE;
+    } else {
+      p.className = 'hint';
+      p.textContent = 'Links open a plain web search in a new tab. No tracking.';
+    }
+    return p;
+  }
+
+  function appendCheckpointLinks(container, pair) {
+    container.appendChild(outLink(insolesUrl(pair), 'insoles', pair, '🔧', 'Replace the cushioning',
+      'opens a web search for replacement insoles'));
+    container.appendChild(outLink(shoesUrl(pair), 'shoes', pair, '🛒', 'Shop new shoes',
+      'opens a web search for ' + (pair.brandModel || pair.nickname)));
+  }
+
+  function outLink(href, kind, pair, icon, label, srText) {
     const a = document.createElement('a');
     a.className = 'btn btn-secondary shop-link';
-    a.href = shopUrl(pair);
+    a.href = href;
     a.target = '_blank';
-    a.rel = 'noopener noreferrer';
+    a.rel = AFFILIATE_LINKS[kind] && AFFILIATE_LINKS[kind].affiliateUrl ? 'sponsored noopener noreferrer' : 'noopener noreferrer';
     a.referrerPolicy = 'no-referrer';
+    a.setAttribute('data-link', kind);
     a.setAttribute('data-shop', pair.id);
-    a.innerHTML = '<span aria-hidden="true">🛒</span> Shop for a new pair <span class="visually-hidden">(opens a web search for ' + escapeHtml(pair.brandModel || pair.nickname) + ')</span>';
+    a.innerHTML = '<span aria-hidden="true">' + icon + '</span> ' + escapeHtml(label) +
+      ' <span class="visually-hidden">(' + escapeHtml(srText) + ', new tab)</span>';
     return a;
   }
 
@@ -480,6 +677,8 @@
         o.textContent = p.nickname;
         sel.appendChild(o);
       });
+      const def = defaultSelectedPair();
+      if (def) sel.value = def;
     }
 
     const shiftSel = $('shift-template');
@@ -502,7 +701,7 @@
         const alloc = state.allocations.find(function (a) { return a.date === log.date; });
         const pair = alloc ? state.pairs.find(function (p) { return p.id === alloc.pairId; }) : null;
         const li = document.createElement('li');
-        li.textContent = log.date + ' · ' + formatSteps(log.totalSteps) + ' steps · ' +
+        li.textContent = log.date + ' · ' + formatSteps(log.totalSteps) + ' steps (' + formatMiles(log.totalSteps) + ') · ' +
           log.source + (pair ? ' · ' + pair.nickname : '');
         ul.appendChild(li);
       });
@@ -523,7 +722,7 @@
     state.pairs.filter(function (p) { return p.status === 'active'; }).forEach(function (p) {
       const o = document.createElement('option');
       o.value = p.id;
-      o.textContent = p.nickname + ' (~' + formatSteps(pairEffectiveSteps(p)) + ' est. steps)';
+      o.textContent = p.nickname + ' (~' + formatSteps(pairEffectiveSteps(p)) + ' est. steps, ' + formatMiles(pairEffectiveSteps(p)) + ')';
       sel.appendChild(o);
     });
   }
@@ -564,6 +763,9 @@
     $('pair-threshold').value = pair && pair.checkThresholdOverride ? pair.checkThresholdOverride : '';
     $('pair-baseline').value = pair && pair.baselineGauge != null ? pair.baselineGauge : '';
     $('pair-photo').value = '';
+    $('pair-photo-camera').value = '';
+    pendingPhoto = undefined;
+    showPhotoPreview(pair ? pair.photoDataUrl : null);
     showView('pair-form');
   }
 
@@ -574,10 +776,7 @@
     const pct = usagePct(pair);
     const checks = state.checks.filter(function (c) { return c.pairId === id; })
       .sort(function (a, b) { return b.date.localeCompare(a.date); });
-    let photoHtml = '';
-    if (pair.photoDataUrl) {
-      photoHtml = '<img class="pair-thumb" src="' + pair.photoDataUrl + '" alt="Photo of ' + escapeAttr(pair.nickname) + '">';
-    }
+    const worn = pairStepsWorn(pair);
     let checksHtml = '<h3 class="subhead">Checks</h3>';
     if (checks.length === 0) {
       checksHtml += '<p class="hint">No checks recorded yet.</p>';
@@ -592,18 +791,19 @@
       checksHtml += '</ul>';
     }
     $('pair-detail-body').innerHTML =
-      photoHtml +
+      (pair.photoDataUrl ? photoHtml(pair, 'pair-photo-large') : '') +
       '<dl class="detail-stats">' +
+        '<dt>Worn</dt><dd>' + formatMiles(worn) + ' · ' + formatSteps(worn) + ' logged steps (miles = steps ÷ ' + STEPS_PER_MILE.toLocaleString() + ')</dd>' +
         '<dt>Type</dt><dd>' + escapeHtml(TYPE_LABEL[pair.type] || pair.type) +
           ' (typeFactor ' + typeFactor(pair.type) + ' — estimate)</dd>' +
-        '<dt>Estimated effective steps</dt><dd>' + formatSteps(pairEffectiveSteps(pair)) + '</dd>' +
+        '<dt>Estimated effective steps</dt><dd>' + formatSteps(pairEffectiveSteps(pair)) + ' (' + formatMiles(pairEffectiveSteps(pair)) + ')</dd>' +
         '<dt>Foam</dt><dd>' + escapeHtml(FOAM_LABEL[pair.foam] || FOAM_LABEL.standard) +
           ' (factor ' + foamFactor(pair.foam) + ' — estimate)</dd>' +
         '<dt>First worn</dt><dd>' + escapeHtml(pair.firstWorn || pair.purchaseDate || '') +
           ' (age factor ' + ageMultiplier(pair.firstWorn || pair.purchaseDate).toFixed(2) + ' — estimate)</dd>' +
         '<dt>Last worn</dt><dd>' + escapeHtml(lastWornText(pair).replace('Last worn: ', '')) + '</dd>' +
-        '<dt>Check point</dt><dd>' + formatSteps(pairThreshold(pair)) + ' (heuristic: base ' +
-          formatSteps(baseThreshold(pair)) + ' adjusted for foam and age)</dd>' +
+        '<dt>Check point</dt><dd>' + formatSteps(pairThreshold(pair)) + ' effective steps, about ' + formatMiles(pairThreshold(pair)) +
+          ' (heuristic: base ' + formatSteps(baseThreshold(pair)) + ' adjusted for foam and age; weight band counts on the usage side)</dd>' +
         '<dt>Usage</dt><dd>About ' + Math.min(100, Math.round(pct * 100)) + '% of check point ' + usageIcon(pct) + '</dd>' +
         (pair.brandModel ? '<dt>Brand / model</dt><dd>' + escapeHtml(pair.brandModel) + '</dd>' : '') +
         '<dt>Started</dt><dd>' + escapeHtml(pair.purchaseDate) + '</dd>' +
@@ -619,8 +819,10 @@
       '</div>' +
       '<div id="detail-shop"></div>';
     if (pair.status === 'active' && pct >= 1) {
-      $('detail-shop').appendChild(shopLink(pair));
-      $('detail-shop').insertAdjacentHTML('beforeend', '<p class="hint">Opens a plain web search in a new tab. No tracking or affiliate links.</p>');
+      const box = $('detail-shop');
+      box.className = 'ca-actions';
+      appendCheckpointLinks(box, pair);
+      box.appendChild(linkNote());
     }
     $('btn-edit-pair').addEventListener('click', function () { openPairForm(pair); });
     const retireBtn = $('btn-retire-pair');
@@ -704,15 +906,32 @@
     $('btn-pair-cancel').addEventListener('click', function () { showView('home'); });
     $('btn-detail-back').addEventListener('click', function () { showView('home'); });
 
+    ['pair-photo', 'pair-photo-camera'].forEach(function (inputId) {
+      $(inputId).addEventListener('change', async function () {
+        const f = $(inputId).files[0];
+        if (!f) return;
+        try {
+          pendingPhoto = await downscalePhoto(f);
+          showPhotoPreview(pendingPhoto);
+        } catch (err) {
+          toast('Could not read that photo');
+        }
+        $(inputId).value = '';
+      });
+    });
+    $('btn-photo-remove').addEventListener('click', function () {
+      pendingPhoto = '';
+      showPhotoPreview(null);
+    });
+
+    $('btn-wear-today').addEventListener('click', wearToday);
+
     $('form-pair').addEventListener('submit', async function (e) {
       e.preventDefault();
       const id = $('pair-id').value || uid();
       const existing = state.pairs.find(function (p) { return p.id === id; });
-      const file = $('pair-photo').files[0];
-      let photoDataUrl = existing ? existing.photoDataUrl : null;
-      if (file) {
-        photoDataUrl = await readFileAsDataUrl(file);
-      }
+      let photoDataUrl = existing ? (existing.photoDataUrl || null) : null;
+      if (pendingPhoto !== undefined) photoDataUrl = pendingPhoto || null;
       const thrRaw = $('pair-threshold').value;
       const baseRaw = $('pair-baseline').value;
       const pair = {
@@ -734,7 +953,9 @@
         Object.assign(existing, pair);
       } else {
         state.pairs.push(pair);
+        if (!selectedPairId) selectedPairId = pair.id;
       }
+      pendingPhoto = undefined;
       await saveState();
       toast('Pair saved');
       showView('home');
@@ -797,19 +1018,7 @@
         steps = Number(s);
       }
       const standing = Number($('log-standing').value) || 0;
-      // upsert day log
-      const existing = state.dayLogs.find(function (l) { return l.date === date; });
-      if (existing) {
-        existing.totalSteps = steps;
-        existing.standingHours = standing;
-        existing.source = source;
-      } else {
-        state.dayLogs.push({ date: date, totalSteps: steps, standingHours: standing, source: source });
-      }
-      // allocation: all to selected pair for v0.1
-      state.allocations = state.allocations.filter(function (a) { return a.date !== date; });
-      state.allocations.push({ date: date, pairId: pairId, fraction: 1.0 });
-      await saveState();
+      await logDay(date, steps, standing, source, pairId);
       toast('Day log saved');
       $('log-steps').value = '';
       $('log-standing').value = '';
@@ -919,6 +1128,91 @@
     });
   }
 
+  /**
+   * Upsert one day log and give 100% of that day to one pair (the existing v0.1 active-pair rule).
+   * Shared by the Log steps form and the dashboard 'Wearing These Today' button.
+   */
+  async function logDay(date, steps, standing, source, pairId) {
+    const existing = state.dayLogs.find(function (l) { return l.date === date; });
+    if (existing) {
+      existing.totalSteps = steps;
+      existing.standingHours = standing;
+      existing.source = source;
+    } else {
+      state.dayLogs.push({ date: date, totalSteps: steps, standingHours: standing, source: source });
+    }
+    state.allocations = state.allocations.filter(function (a) { return a.date !== date; });
+    state.allocations.push({ date: date, pairId: pairId, fraction: 1.0 });
+    selectedPairId = pairId;
+    await saveState();
+  }
+
+  async function wearToday() {
+    const pair = state.pairs.find(function (p) { return p.id === selectedPairId && p.status === 'active'; });
+    if (!pair) { toast('Tap a pair first'); return; }
+    const raw = String($('wear-steps').value || '').trim();
+    const existing = todayLog();
+    let steps;
+    let source = 'manual';
+    let standing = 0;
+    if (raw === '') {
+      if (!existing) { toast('Enter today\'s steps'); $('wear-steps').focus(); return; }
+      steps = Number(existing.totalSteps) || 0;
+      source = existing.source || 'manual';
+    } else {
+      steps = Math.round(Number(raw));
+      if (!isFinite(steps) || steps < 0 || steps > 100000) { toast('Enter steps between 0 and 100,000'); return; }
+    }
+    if (existing) standing = Number(existing.standingHours) || 0;
+    await logDay(todayISO(), steps, standing, source, pair.id);
+    if (document.activeElement === $('wear-steps')) $('wear-steps').blur();
+    toast(formatSteps(steps) + ' steps today → ' + pair.nickname);
+    renderHome();
+    maybeNotifyChecks();
+  }
+
+  function showPhotoPreview(dataUrl) {
+    const img = $('pair-photo-preview');
+    if (dataUrl) {
+      img.src = dataUrl;
+      img.classList.remove('hidden');
+      $('btn-photo-remove').classList.remove('hidden');
+    } else {
+      img.removeAttribute('src');
+      img.classList.add('hidden');
+      $('btn-photo-remove').classList.add('hidden');
+    }
+  }
+
+  /** Downscale a picked/taken photo on-device to fit PHOTO_MAX_PX and re-encode as JPEG. Never uploaded. */
+  function downscalePhoto(file) {
+    return new Promise(function (resolve, reject) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = function () {
+        try {
+          const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
+          const scale = Math.min(1, PHOTO_MAX_PX / Math.max(w0, h0));
+          const w = Math.max(1, Math.round(w0 * scale)), h = Math.max(1, Math.round(h0 * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY));
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          reject(err);
+        }
+      };
+      img.onerror = function (e) { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
+  }
+
   function radioVal(name) {
     const el = document.querySelector('input[name="' + name + '"]:checked');
     return el ? el.value : 'skip';
@@ -940,15 +1234,6 @@
       if (r) r.checked = true;
     });
     $('vc-suggest').textContent = '';
-  }
-
-  function readFileAsDataUrl(file) {
-    return new Promise(function (resolve, reject) {
-      const r = new FileReader();
-      r.onload = function () { resolve(String(r.result)); };
-      r.onerror = reject;
-      r.readAsDataURL(file);
-    });
   }
 
   function maybeNotifyChecks() {
@@ -999,6 +1284,22 @@
     ageMultiplier: ageMultiplier,
     suggestOutcome: suggestOutcome,
     shopUrl: shopUrl,
+    STEPS_PER_MILE: STEPS_PER_MILE,
+    LEGACY_DEFAULT_THRESHOLD: LEGACY_DEFAULT_THRESHOLD,
+    AFFILIATE_LINKS: AFFILIATE_LINKS,
+    AFFILIATE_DISCLOSURE: AFFILIATE_DISCLOSURE,
+    stepsToMiles: stepsToMiles,
+    formatMiles: formatMiles,
+    insolesUrl: insolesUrl,
+    shoesUrl: shoesUrl,
+    affiliateActive: affiliateActive,
+    /** Test helper: run fn with a temporary state (migrated), then restore. */
+    withState: function (s, fn) {
+      const saved = state;
+      state = migrateState(s);
+      try { return fn({ usagePct: usagePct, pairStepsWorn: pairStepsWorn, pairEffectiveSteps: pairEffectiveSteps, pairThreshold: pairThreshold, state: state }); }
+      finally { state = saved; }
+    },
     pairThreshold: function (pair, profile, now) {
       const saved = state.profile;
       if (profile) state.profile = Object.assign({}, saved, profile);
