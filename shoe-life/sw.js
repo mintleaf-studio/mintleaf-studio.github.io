@@ -1,5 +1,5 @@
 /* Shoe Life service worker — cache local assets only. No third-party fetches. */
-const CACHE = 'shoe-life-v0.2';
+const CACHE = 'shoe-life-v0.3';
 const ASSETS = [
   './',
   './index.html',
